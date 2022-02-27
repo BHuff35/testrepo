@@ -1,30 +1,360 @@
 ---
-title: "NFL R Markdown"
-author: "Brandon"
-date: "2/27/2022"
-output: pdf_document
+title: "Technical Appendix"
+subtitle: "How the COVID-19 pandemic has affected the NFL"
+author: "Brandon Huff and Dennis Mbae"
+date: "`r Sys.Date()`"
+abstract: |
+  The Coronavirus of 2020 has influenced almost every aspect of our world, and the American NFL is no exception. We explored just how much of an impact COVID-19, and therefore a lack of roaring fans in the stadiums, has had on the NFL
+
+output: 
+  pdf_document:
+    toc: true 
+    toc_depth: 3
 ---
 
 ```{r setup, include=FALSE}
+
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+\newpage
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+# Introduction
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+This is the technical appendix submitted for the Final Project portion of Statistics 320: Statistics Communications with Professor Pamela Matheson. The project was to analyze the impact of the Coronavirus pandemic on the 2020 NFL season to determine if there were any statistically significant changes to the game as compared to previous seasons. In response to the pandemic of 2020, the NFL began the season without allowing any fans into any of the games, and this was a topic of interest to us. 
 
-```{r cars}
-summary(cars)
+This technical appendix details the code we used in our analysis and the creation of the data visualizations
+that comprised our presentation.
+
+# Technical Setup
+ 
+All the analysis in this project was performed using the R programming language. More information on setting up R and R libraries(packages) can be found in the link below:
+
+https://rstudio-education.github.io/hopr/starting.html
+
+The following R libraries were used in the analysis:
+
+```{r message = F, warning= F}
+library(tidyverse) 
+library(systemfonts)
+library(kableExtra)
+library(reshape2)
+
+
 ```
 
-## Including Plots
+# Data
 
-You can also embed plots, for example:
+Team result datasets were collected from https://www.pro-football-reference.com/ and fan data for each team was collected from https://www.espn.com/nfl/. 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+All the datasets were cleaned and merged into one final dataset. The code can be found in Wrangle.rmd.
+
+```{r}
+nfl_aggregate <- read_csv("nfl_final.csv")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r echo = F}
+nfl_aggregate$WinningSide <- 
+  factor(nfl_aggregate$WinningSide,levels = c("Home","Away"))
+```
+
+```{r comment = NA}
+head(nfl_aggregate)
+```
+
+\vspace{2cm}
+
+```{r echo =F, comment = NA}
+codebook <- tribble(~Variable,~Explanation,
+        "Year","NFL Season",
+        "Week","Week in the season",
+        "Home", "Home Team",
+        "Away", "Away Team",
+        "WinningSide", "Winning Side",
+        "PtsH", "Points scored by Home team",
+        "PtsA", "Points scored by Away team",
+        "HAPtsDiff","The points difference (PtsH - PtsA)",
+        "AVG", "Average number of fans for the home team")
+
+kable(codebook,caption = "Variables used in the analysis") %>% 
+  kable_styling(latex_options = c("hold_position","striped"))
+```
+
+\newpage
+
+# Data analysis
+
+## Exploratory data analysis
+
+The data has 1459 rows and 9 columns
+
+```{r comment=NA}
+dim(nfl_aggregate)
+```
+
+The following were the years considered in the project.
+
+```{r comment=NA}
+sort(unique(nfl_aggregate$Year))
+```
+
+Because the project was ongoing during the course of the 2020 NFL season, the number of observations present in 2020 was limited to the first 8 weeks of the NFL season, which is about half of the games played in a season(An NFL season has 17 weeks). This was a limitation since only the 2020 season was affected by the Coronavirus.
+
+```{r comment=NA}
+weeks_available <- nfl_aggregate %>% filter(Year == 2020) %>%
+    select(Week) %>%
+    unique()
+
+weeks_available$Week
+```
+\newpage
+
+## Multivariate analysis
+
+### A. Points difference and the number of fans
+
+The following is the linear relationship between the points difference and the number of fans.
+
+```{r fig.width=9, fig.height= 6, message= F, warning= F}
+colors <- c("Home Points" = "black","Home-Away-Diff" ="#0072B2","Away Points" = "#009E73")
+nfl_aggregate %>%
+  mutate(AVG_thousands =AVG/1000) %>%
+  ggplot(aes(x=AVG_thousands)) +
+  geom_smooth(aes(y=HAPtsDiff,color = "Home-Away-Diff"),size = 3, method = "lm", se = F)+
+  geom_smooth(aes(y=PtsH,color = "Home Points"),size = 3,se = F)+
+  geom_smooth(aes(y=PtsA, color = "Away Points"),size = 3,se = F)+
+  geom_hline(yintercept = 0)+
+  labs(y = "Points Difference (Home - Away)",
+       x = "Number of fans (X1000)",
+       title = "Relationship between fans and points difference")+
+  scale_colour_manual(name="Metric",values=colors)+
+  annotate("text",x=76, y=25, label="Home Points",color = "black",size = 5)+
+  annotate("text",x=76, y= 20, label="Away Points",color= "#009E73",size = 5)+
+  annotate("text",x=76, y= 5, label="Points Difference",color = "#0072B2",size = 5)+
+  theme(legend.position="none")+
+  theme(axis.title.x = element_text(size=22), axis.title.y = element_text(size=22), 
+        plot.title = element_text(size=24, hjust = 0.5, face = "bold"),  
+        plot.caption = element_text(hjust = 0, size = 20),axis.text = element_text(size = 20),
+        legend.text=element_text(size=20), legend.title=element_text(size=22),
+        legend.key.size = unit(4,"line"))
+```
+
+Is this relationship statistically significant?
+
+```{r comment = NA}
+fans <- nfl_aggregate %>%
+  mutate(AVGThousands = AVG/1000)
+
+lm15_19 <- lm(data = fans %>% filter(Year < 2020), HAPtsDiff ~ AVGThousands)
+summary(lm15_19)
+```
+
+Using a significance level of 0.05, the AVGThousands variable is statistically significant according to the simple linear regression model. An increase of 10,000 fans is positively correlated with 1 point difference between the home and away teams. We decided to omit the 2020 data since it contains outliers in terms of the number of fans. It is no surprise that if 2020 alone is considered, AVGThousands is not statistically significant.
+
+```{r comment = NA}
+lm20 <- lm(data = fans %>% filter(Year == 2020), HAPtsDiff ~ AVGThousands)
+summary(lm20)
+```
+
+Using a significance level of 0.05, the AVGThousands variable is not statistically significant in 2020 according to the simple linear regression model.
+
+\underline{Checking conditions for linear regression}
+
+```{r fig.height= 3, fig.width= 6}
+par(mar = c(2, 2, 2, 2)) 
+plot(lm15_19,1) 
+```
+
+The red horizontal line, without distinct patterns is an indication for a linear relationship.
+
+```{r fig.height= 3, fig.width= 6}
+par(mar = c(2, 2, 2, 2)) 
+plot(lm15_19,2)
+```
+
+Almost all our data follows a nearly normal distribution as shown in the graph. The nearly normal condition is met.
+
+\newpage
+
+```{r fig.height= 3, fig.width= 6}
+par(mar = c(2, 2, 2, 2)) 
+plot(lm15_19,3)
+```
+
+The red line in the plot above is approximately horizontal, therefore the equal variance condition is met.
+
+We assumed that the result from each game played is independent and does not depend on other games played, which is reasonable. We earlier mentioned that 2020 presents outliers in terms of the number of fans because of the coronavirus pandemic, therefore we omitted the 2020 points from our analysis.
+
+### B. Home versus Away wins
+
+The following was the distribution of game winners every year for the first 8 weeks in each season we looked at.
+
+```{r fig.width= 9, fig.height= 6}
+nfl_aggregate %>%
+  filter(Week < 9) %>%
+  ggplot(aes(x=WinningSide,fill = WinningSide)) +
+  geom_bar(stat ="count") +
+  facet_grid(~Year)+
+  ggtitle("Distribution of winners across years")+
+  scale_fill_manual(values = c("black", "#009E73"))
+```
+
+To investigate whether the difference in winners was statistically different in 2020 compared to the previous years, a chi squared test of independence was carried out.
+
+```{r comment = NA}
+set.seed(1)
+sampled_data <- nfl_aggregate %>% 
+  filter(Week < 9) %>%
+  sample_n(700, replace = T)
+
+table_before_20 <- sampled_data %>%
+  filter(Year < 2020)%>%
+  count(WinningSide == "Home") %>%
+  mutate(Year = "Before 2020")
+
+table_after_20 <- sampled_data %>%
+  filter(Year == 2020) %>%
+  count(WinningSide == "Home")%>%
+  mutate(Year = "2020")
+
+colnames(table_before_20) <- c("win","frequency","year")
+colnames(table_after_20) <- c("win","frequency","year")
+
+table <- rbind(table_before_20,table_after_20)%>%
+  spread(win,frequency) %>%
+  rename(Home = "TRUE",Away = "FALSE") 
+
+kable(table,caption = "Home and Away wins in the first 8 weeks from 700 randomly sampled points") %>%
+  kable_styling(latex_options = c("hold_position","striped"), position = "center")
+```
+
+```{r comment = NA}
+chisq.test(table %>% select(-year))
+```
+
+With a p-value of 0.5708 and a significance level($\alpha$) of 0.05, we fail to reject the null hypothesis. The winning side and year the game was played are independent variables therefore 2020 is not statistically different compared to the previous years.
+
+The chi-square test of independence is appropriate when the following conditions are met:
+
+- The sampling method is simple random sampling. This condition was met since we randomly sampled 700 points from the population data before performing the test.
+
+- The variables under study are each categorical. This condition was met.
+
+- If sample data are displayed in a contingency table, the expected frequency count for each cell of the table is at least 5. This condition is met.
+
+### C. Home versus away points
+
+The following was the distribution of the home away points difference, the difference between the points scored by the home team and the points scored by the away team, for the first 8 weeks of the season.
+
+```{r fig.width= 10, fig.height= 7}
+before_20 <- nfl_aggregate %>%
+  filter(Week < 9, Year < 2020) %>% mutate(Year = "2015-2019")
+after_20 <- nfl_aggregate %>%
+  filter(Week < 9, Year == 2020)
+#used to create an extra legend entry - not in any way used in the analysis
+dummy <- after_20 <- nfl_aggregate %>%
+  filter(Week < 9, Year == 2020) %>% mutate(HAPtsDiff == 0)
+cols <- c("2015-2019"="#0072B2","2020"="yellow","Overlap" = "#80b959")
+before_20 %>% filter(Week < 9) %>% ggplot(aes(x= HAPtsDiff)) +
+  geom_density(aes(fill = "2015-2019"))+
+  geom_density(data = after_20, aes(fill = "2020"), alpha = 0.5)+
+  geom_density(data = dummy, aes(fill = "Overlap"), alpha = 0)+
+  ggtitle("Distribution of Points Difference across years")+
+  theme(axis.title.x = element_text(size=22), axis.title.y = element_text(size=22), 
+        plot.title = element_text(size=24, hjust = 0.5, face = "bold"), 
+        plot.caption = element_text(hjust = 0, size = 20),axis.text = element_text(size = 20),
+        strip.text.x = element_text(size =20 ),legend.position=c(.9,.8),
+        legend.text=element_text(size=17))+
+  aes(y=stat(count)/sum(stat(count))) + 
+  scale_fill_manual(name="Year",values=cols)+
+  labs(x = "Points Difference (Home - Away)",y = "Density") 
+```
+
+if the years 2015-2019 represent the population, what are the chances we see a year like 2020? To perform this analysis, we carried out a two sided unpaired Welch's t-test.
+
+```{r comment = NA}
+set.seed(10)
+sampled_data <- nfl_aggregate %>% 
+  filter(Week < 9) %>%
+  sample_n(700, replace = T)
+below_20 <- sampled_data %>%
+  filter(Year < 2020)
+after_20 <- sampled_data %>%
+  filter(Year == 2020)
+t.test(below_20$HAPtsDiff, after_20$HAPtsDiff)
+```
+
+With a p-value of 0.4198 and a significance level($\alpha$) of 0.05, we fail to reject the null hypothesis. The means of the two groups are not statistically different.
+
+The Welch's t-test is appropriate when the following conditions are met:
+
+- The data is randomly sampled. This condition was met since we randomly sampled 700 points from the population data before performing the test.
+
+- Data follows a normal distribution. This condition is met as shown in the density plots above.
+
+- Data values are independent. This condition is met since we assume each game played is independent.
+
+- The Welch's t-test accounts for unequal variance between groups.
+
+### D. Home and Away points
+
+The following was the distribution of the average home and away points for the first 8 weeks of the season.
+
+```{r comment = NA, warning = F, fig.width= 7, fig.height= 4, message= F}
+ptsData2020 <- nfl_aggregate %>% filter(Year == 2020) %>%
+  summarize(Home = mean(PtsH), Away = mean(PtsA), Year = Year)
+ptsDataBelow2020 <- nfl_aggregate %>% filter(Year < 2020,!is.na(PtsH)) %>%
+  summarize(Home = mean(PtsH), Away = mean(PtsA), Year = "2015-2019") 
+ptsData <- rbind(ptsData2020,ptsDataBelow2020)
+dfm <- melt(ptsData[,c('Year','Home','Away')],id.vars = 1) 
+ggplot(dfm,aes(x = Year,y = value)) + 
+  geom_bar(aes(fill = variable),stat = "identity",position = "dodge")+
+  scale_fill_manual(values = c("black", "#009E73"))+
+  labs(title = "Average number of points scored")+
+  guides(fill=guide_legend(title="Side"))+ ylim(c(0,30))+
+  geom_text(aes(label= round(value,2),group = variable),vjust=-.4, colour="black",
+             position=position_dodge(width = 0.9), size=7)
+```
+
+\newpage
+
+If the years 2015-2019 represent the population, what are the chances we see a year like 2020? To perform this analysis, we carried out a two sided unpaired Welch's t-test.
+
+```{r comment = NA}
+t.test(below_20$PtsH, after_20$PtsH)
+```
+
+With a p-value of 0.001774 and a significance level($\alpha$) of 0.05, we reject the null hypothesis. The means of the two groups are statistically different. The home points in 2020 increased significantly in 2020 compared to other years.
+
+```{r comment = NA}
+t.test(below_20$PtsA, after_20$PtsA)
+```
+
+With a p-value of 0.006232 and a significance level($\alpha$) of 0.05, we reject the null hypothesis. The means of the two groups are statistically different. The away points in 2020 increased significantly in 2020 compared to other years.
+
+The Welch's t-test is appropriate when the following conditions are met:
+
+- The data is randomly sampled. This condition was met since we randomly sampled 700 points from the population data before performing the test.
+
+- Data values are independent. This condition is met since we assume each game played is independent.
+
+- The Welch's t-test accounts for unequal variance between groups.
+
+- Normality. As displayed in the graphs below, both PtsH and PtsA variables seem to be nearly normally distributed.
+
+```{r fig.width= 7, fig.height= 4}
+hist(below_20$PtsH,breaks = 5,main = "Distribution of Home Points",xlab = "Home Points", col = "black")
+```
+
+```{r fig.width= 7, fig.height= 4}
+hist(below_20$PtsA,breaks = 5,main = "Distribution of Away Points",xlab="Away Points",col="#009E73")
+```
+\newpage
+
+# Conclusion
+
+Fans have an impact on the game and negatively affect the Away team’s performance, thus helping the Home teams win more games. This impact essentially disappeared in the 2020 season due to necessary COVID-19 restrictions. As a result, Home teams do not have the advantage they once had and Away teams have less distractions, allowing for more points per game. This, however, has not significantly impacted who is actually winning the games.
+
+Unfortunately, our study took place in the middle of the 2020 season, so we only had access to the first 8 weeks. This prevented us from making conclusions on the 2020 season as a whole. Moving forward, we recommend further study into the relationship between fan attendance and team performance after the 2020 season has had a chance to conclude.
+
+
